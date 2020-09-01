@@ -1,0 +1,125 @@
+Description: >
+  This cloudformation Template creates the below network resources in a Single AZ:
+  1. VPC | 2. Public Subnet | 3. Private Subnet | 4. Internet Gateway | 5. Nat Gateway | 6. Route Tables
+
+# Define the Variables 
+Parameters:
+ VpcCIDR:
+    Description: VPC CIDR Block
+    Type: String
+    Default: 10.0.0.0/16
+
+ PublicSubnetCIDR:
+   Type: String
+   Default: 10.0.1.0/24
+  
+ PrivateSubnetCIDR:
+   Type: String
+   Default: 10.0.2.0/24
+
+Resources:
+# Creating VPC
+  MainVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: 'True'
+      EnableDnsSupport: 'True'
+      Tags: 
+        - Key: Name
+          Value: MainVPC
+
+# Creating InternetGateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: MainVPC
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-IGWA
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MainVPC
+      InternetGatewayId: !Ref InternetGateway
+
+# Creating Public-SubnetA
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: 'True'
+      VpcId: !Ref MainVPC
+      Tags: 
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicA
+  
+# Creating NATGateway
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt ElasticIPAddress.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-NATGWA
+  ElasticIPAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: MainVPC
+    
+# Creating Private-SubnetA
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MainVPC
+      CidrBlock: !Ref PrivateSubnetCIDR
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateA
+
+# creating Public Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: Public
+  PublicRouteA:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+# Creating Private Route Table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MainVPC 
+      Tags:
+        - Key: Name
+          Value: Private
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+# Attach Subnets to its Route Tables
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable

@@ -1,0 +1,18 @@
+Description: > 
+  The main Security Group for the MainVPC
+
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0958e3622a0ec25f4
+
+Resources:
+  ECSHostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MainVPC SecurityGroup
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: MainVPC-Sec-Group
+
